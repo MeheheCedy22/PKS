@@ -60,6 +60,12 @@ def get_frame_info(packet, packet_count):
         packet_info['pid'] = getPID(raw_bytes)
     elif getFrameType(raw_bytes) == "ETHERNET II":
         packet_info['ether_type'] = getEtherType(raw_bytes)
+        if getEtherType(raw_bytes) == "IPv4":
+            packet_info['src_ip'] = getIPv4(raw_bytes, "s")
+            packet_info['dst_ip'] = getIPv4(raw_bytes, "d")
+        # elif getFrameType(raw_bytes) == "IEEE 802.3 RAW":
+        #     packet_info['src_ip'] =
+        #     packet_info['dst_ip'] =
 
     return packet_info
 
@@ -109,6 +115,25 @@ def getDstMAC(data):
 
 def getSrcMAC(data):
     return f"{data[6]:02X}:{data[7]:02X}:{data[8]:02X}:{data[9]:02X}:{data[10]:02X}:{data[11]:02X}"
+
+
+# for IPv4
+def getIPv4(data, s_or_d):
+    first_half = data[14] >> 4
+    second_half = data[14] & 0b00001111
+
+    if first_half == 4:
+        end_of_ip = 14 + second_half * 4
+        if s_or_d == "d":
+            return f"{data[end_of_ip-4]:d}.{data[end_of_ip-3]:d}.{data[end_of_ip-2]:d}.{data[end_of_ip-1]:d}"
+        elif s_or_d == "s":
+            return f"{data[end_of_ip - 8]:d}.{data[end_of_ip - 7]:d}.{data[end_of_ip - 6]:d}.{data[end_of_ip - 5]:d}"
+        else:
+            return ""
+    return ""
+
+# def getIP_for_ARP(data, s_or_d):
+
 
 
 def helloHelp():
