@@ -22,8 +22,8 @@ def getDataFromFile(txt_file, option, number):
         for key, value in parsed_data.get("pid", {}).items():
             if key == number:
                 return value
-    elif option == "tcp_ports":
-        for key, value in parsed_data.get("tcp_ports", {}).items():
+    elif option == "tcp_protocols":
+        for key, value in parsed_data.get("tcp_protocols", {}).items():
             if key == number:
                 return value
     elif option == "ip_protocols":
@@ -45,6 +45,7 @@ def get_frame_info(packet, packet_count):
     packet_hex_dump = ' '.join([hexa_frame[i:i + 2] for i in range(0, len(hexa_frame), 3)])
     packet_hex_dump = 'PIPENEWLINE' + 'NEWLINE'.join([packet_hex_dump[i:i + 47] for i in range(0, len(packet_hex_dump), 48)])
 
+    # for IEEE 802.3 RAW
     packet_info = {
         'frame_number': packet_count,
         'len_frame_pcap': len(packet),
@@ -63,9 +64,28 @@ def get_frame_info(packet, packet_count):
         if getEtherType(raw_bytes) == "IPv4":
             packet_info['src_ip'] = getIPv4(raw_bytes, "s")
             packet_info['dst_ip'] = getIPv4(raw_bytes, "d")
-        # elif getFrameType(raw_bytes) == "IEEE 802.3 RAW":
-        #     packet_info['src_ip'] =
-        #     packet_info['dst_ip'] =
+
+            protocol = getIPv4Protocol(raw_bytes)
+            packet_info['protocol'] = protocol
+
+            if protocol == "tcp" or protocol == "udp":
+                src_port = getTCPorUDP_port(raw_bytes, "s")
+                dst_port = getTCPorUDP_port(raw_bytes, "d")
+
+                packet_info['src_port'] = src_port
+                packet_info['dst_port'] = dst_port
+
+                name_src = getDataFromFile("ports-etc-plus-mine.txt", f"{protocol}_protocols", src_port)
+                name_dst = getDataFromFile("ports-etc-plus-mine.txt", f"{protocol}_protocols", dst_port)
+
+                if name_src is not None and name_src != "":
+                    packet_info['app_protocol'] = name_src
+                elif name_dst is not None and name_dst != "":
+                    packet_info['app_protocol'] = name_dst
+
+        elif getEtherType(raw_bytes) == "ARP":
+            packet_info['src_ip'] = getIP_for_ARP(raw_bytes, "s")
+            packet_info['dst_ip'] = getIP_for_ARP(raw_bytes, "d")
 
     return packet_info
 
@@ -132,8 +152,29 @@ def getIPv4(data, s_or_d):
             return ""
     return ""
 
-# def getIP_for_ARP(data, s_or_d):
 
+def getIP_for_ARP(data, s_or_d):
+    if s_or_d == "d":
+        return f"{data[38]:d}.{data[39]:d}.{data[40]:d}.{data[41]:d}"
+    elif s_or_d == "s":
+        return f"{data[28]:d}.{data[29]:d}.{data[30]:d}.{data[31]:d}"
+
+    return ""
+
+
+def getIPv4Protocol(data):
+    return getDataFromFile("ports-etc-plus-mine.txt", "ip_protocols", data[23])
+
+
+def getTCPorUDP_port(data, s_or_d):
+    start_index = 14 + (data[14] & 0b00001111) * 4
+    port_id = -1
+    if s_or_d == "s":
+        port_id = getDecimalFrom2BytesAfterOther(data, start_index)
+    elif s_or_d == "d":
+        port_id = getDecimalFrom2BytesAfterOther(data, start_index+2)
+
+    return port_id
 
 
 def helloHelp():
