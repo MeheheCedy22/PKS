@@ -1,15 +1,15 @@
 from scapy.all import rdpcap
 import ruamel.yaml as yaml
 
+global parsed_data
 
-def getDataFromFile(txt_file, option, number):
-    # Load the contents of the file
-    with open(txt_file, "r") as file:
-        data = file.read()
+# Load the contents of the file globally
+with open("Protocols/ports-etc-plus-mine.txt", "r") as file:
+    global_data = file.read()
+    parsed_data = yaml.safe_load(global_data)
 
-    # Parse the YAML content into a dictionary
-    parsed_data = yaml.safe_load(data)
 
+def getDataFromFile(option, number):
     if option == "ether_types":
         for key, value in parsed_data.get("ether_types", {}).items():
             if key == number:
@@ -24,6 +24,10 @@ def getDataFromFile(txt_file, option, number):
                 return value
     elif option == "tcp_protocols":
         for key, value in parsed_data.get("tcp_protocols", {}).items():
+            if key == number:
+                return value
+    elif option == "udp_protocols":
+        for key, value in parsed_data.get("udp_protocols", {}).items():
             if key == number:
                 return value
     elif option == "ip_protocols":
@@ -55,6 +59,9 @@ def get_frame_info(packet, packet_count):
         'dst_mac': getDstMAC(raw_bytes),
         'hexa_frame': packet_hex_dump,
     }
+
+    # for other frame types, add more info
+
     if getFrameType(raw_bytes) == "IEEE 802.3 LLC":
         packet_info['sap'] = getSAP(raw_bytes)
     elif getFrameType(raw_bytes) == "IEEE 802.3 LLC & SNAP":
@@ -75,8 +82,8 @@ def get_frame_info(packet, packet_count):
                 packet_info['src_port'] = src_port
                 packet_info['dst_port'] = dst_port
 
-                name_src = getDataFromFile("ports-etc-plus-mine.txt", f"{protocol}_protocols", src_port)
-                name_dst = getDataFromFile("ports-etc-plus-mine.txt", f"{protocol}_protocols", dst_port)
+                name_src = getDataFromFile(f"{protocol}_protocols", src_port)
+                name_dst = getDataFromFile(f"{protocol}_protocols", dst_port)
 
                 if name_src is not None and name_src != "":
                     packet_info['app_protocol'] = name_src
@@ -96,12 +103,12 @@ def getDecimalFrom2BytesAfterOther(data, index1):
 
 def getEtherType(data):
     decimal = getDecimalFrom2BytesAfterOther(data, 12)
-    return getDataFromFile("ports-etc-plus-mine.txt", "ether_types", decimal)
+    return getDataFromFile("ether_types", decimal)
 
 
 def getPID(data):
     decimal = getDecimalFrom2BytesAfterOther(data, 20)
-    return getDataFromFile("ports-etc-plus-mine.txt", "pid", decimal)
+    return getDataFromFile("pid", decimal)
 
 
 # for SAPs
@@ -115,7 +122,7 @@ def getDecimalIf2BytesSame(data, index1):
 def getSAP(data):
     decimal = getDecimalIf2BytesSame(data, 14)
     if decimal != -1:
-        return getDataFromFile("ports-etc-plus-mine.txt", "saps", decimal)
+        return getDataFromFile("saps", decimal)
 
 
 def getFrameType(data):
@@ -140,10 +147,12 @@ def getSrcMAC(data):
 # for IPv4
 def getIPv4(data, s_or_d):
     first_half = data[14] >> 4
-    second_half = data[14] & 0b00001111
+    # myslel som ze bude potrebna aj druha polovica, ale ip adresy su stale na rovnakych indexoch
+    # dalej su uz Options (optional)
+    # second_half = data[14] & 0b00001111
 
     if first_half == 4:
-        end_of_ip = 14 + second_half * 4
+        end_of_ip = 14 + 5 * 4  # 5*4 = 20; 20+14 = 34; before end_of_ip = 14 + second_half * 4
         if s_or_d == "d":
             return f"{data[end_of_ip-4]:d}.{data[end_of_ip-3]:d}.{data[end_of_ip-2]:d}.{data[end_of_ip-1]:d}"
         elif s_or_d == "s":
@@ -163,7 +172,7 @@ def getIP_for_ARP(data, s_or_d):
 
 
 def getIPv4Protocol(data):
-    return getDataFromFile("ports-etc-plus-mine.txt", "ip_protocols", data[23])
+    return getDataFromFile("ip_protocols", data[23])
 
 
 def getTCPorUDP_port(data, s_or_d):
@@ -200,10 +209,12 @@ def main():
     try:
         packets = rdpcap(pcap_file)
         packet_count = 0
+        ipv4_senders = {}
         output_data = {
             'name': 'PKS2023/24',
             'pcap_name': sys.argv[1],
-            'packets': []
+            'packets': [],
+            'ipv4_senders': set()  # Use a set to store unique IPv4 senders
         }
 
         for packet in packets:
@@ -211,6 +222,24 @@ def main():
 
             packet_info = get_frame_info(packet, packet_count)
             output_data['packets'].append(packet_info)
+
+            # for IPv4 senders
+            if packet_info['frame_type'] == "ETHERNET II" and packet_info['ether_type'] == "IPv4":
+                src_ip = packet_info['src_ip']
+
+                if src_ip not in ipv4_senders:
+                    ipv4_senders[src_ip] = 1
+                else:
+                    ipv4_senders[src_ip] += 1
+
+                # Convert the dictionary to the desired list of dictionaries format
+                ipv4_senders_list = [{'node': ip, 'number_of_sent_packets': count} for ip, count in ipv4_senders.items()]
+                output_data['ipv4_senders'] = ipv4_senders_list
+
+                # Determine the maximum number of sent packets by individual senders
+                max_send_packets = max(ipv4_senders.values())
+                max_send_packets_by = [ip for ip, count in ipv4_senders.items() if count == max_send_packets]
+                output_data['max_send_packets_by'] = max_send_packets_by
 
         with open('output.yaml', 'w') as yaml_file:
             yaml_full = yaml.dump(output_data, default_flow_style=False, width=9999999)
