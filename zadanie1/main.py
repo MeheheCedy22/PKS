@@ -1,41 +1,45 @@
 from scapy.all import rdpcap
 import ruamel.yaml as yaml
 
-global parsed_data
+global parsed_data_ports_and_protocols
+global data_4
 
 # Load the contents of the file globally
 with open("Protocols/ports-etc-plus-mine.txt", "r") as file:
     global_data = file.read()
-    parsed_data = yaml.safe_load(global_data)
+    parsed_data_ports_and_protocols = yaml.safe_load(global_data)
+
+with open("Protocols/protocols-4.txt", "r") as file_4:
+    data_4 = file_4.read()
 
 
 def getDataFromFile(option, number):
     if option == "ether_types":
-        for key, value in parsed_data.get("ether_types", {}).items():
+        for key, value in parsed_data_ports_and_protocols.get("ether_types", {}).items():
             if key == number:
                 return value
     elif option == "saps":
-        for key, value in parsed_data.get("saps", {}).items():
+        for key, value in parsed_data_ports_and_protocols.get("saps", {}).items():
             if key == number:
                 return value
     elif option == "pid":
-        for key, value in parsed_data.get("pid", {}).items():
+        for key, value in parsed_data_ports_and_protocols.get("pid", {}).items():
             if key == number:
                 return value
     elif option == "tcp_protocols":
-        for key, value in parsed_data.get("tcp_protocols", {}).items():
+        for key, value in parsed_data_ports_and_protocols.get("tcp_protocols", {}).items():
             if key == number:
                 return value
     elif option == "udp_protocols":
-        for key, value in parsed_data.get("udp_protocols", {}).items():
+        for key, value in parsed_data_ports_and_protocols.get("udp_protocols", {}).items():
             if key == number:
                 return value
     elif option == "ip_protocols":
-        for key, value in parsed_data.get("ip_protocols", {}).items():
+        for key, value in parsed_data_ports_and_protocols.get("ip_protocols", {}).items():
             if key == number:
                 return value
     elif option == "icmp_codes":
-        for key, value in parsed_data.get("icmp_codes", {}).items():
+        for key, value in parsed_data_ports_and_protocols.get("icmp_codes", {}).items():
             if key == number:
                 return value
     else:
@@ -187,35 +191,64 @@ def getTCPorUDP_port(data, s_or_d):
 
 
 def helloHelp():
-    print("""
-
-    """)
+    print(f"""
+Usage: {sys.argv[0]} <pcap_file> <-switch> <protocol>
+Example: {sys.argv[0]} eth-1.pcap -p http   
+Supported switches: -p
+Supported protocols: """, end="")
+    protocols_list = []
+    for line in data_4.splitlines():
+        protocols_list.append(line)
+    print(', '.join(protocols_list))
 
 
 def main():
+    protocol_to_find = ""
     if len(sys.argv) < 2:
-        print()
-        print(f"Usage: {sys.argv[0]} <pcap_file> <-switch>")
+        print("Missing arguments")
         print("For help use -h or --help")
-        print(f"{sys.argv[0]} -h")
         return
 
     if sys.argv[1] == "-h" or sys.argv[1] == "--help":
         helloHelp()
         return
 
+    if len(sys.argv) == 3:
+        print("Missing protocol")
+        return
+
+    if len(sys.argv) == 4 and sys.argv[2] != "-p":
+        print("Wrong switch")
+        return
+
+    if len(sys.argv) > 4:
+        print("Too many arguments")
+        return
+
+    if len(sys.argv) == 4:
+        found = False
+        for line in data_4.splitlines():
+            if line == sys.argv[3]:
+                found = True
+                protocol_to_find = line
+                break
+        if not found:
+            print("Protocol not found")
+            return
+
     pcap_file = sys.argv[1]
 
     try:
         packets = rdpcap(pcap_file)
         packet_count = 0
-        ipv4_senders = {}
         output_data = {
             'name': 'PKS2023/24',
             'pcap_name': sys.argv[1],
             'packets': [],
-            'ipv4_senders': set()  # Use a set to store unique IPv4 senders
         }
+        if protocol_to_find == "":
+            ipv4_senders = {}
+            output_data['ipv4_senders']: ipv4_senders  # Use a set to store unique IPv4 senders
 
         for packet in packets:
             packet_count += 1
@@ -223,23 +256,24 @@ def main():
             packet_info = get_frame_info(packet, packet_count)
             output_data['packets'].append(packet_info)
 
-            # for IPv4 senders
-            if packet_info['frame_type'] == "ETHERNET II" and packet_info['ether_type'] == "IPv4":
-                src_ip = packet_info['src_ip']
+            if protocol_to_find == "":
+                # for IPv4 senders
+                if packet_info['frame_type'] == "ETHERNET II" and packet_info['ether_type'] == "IPv4":
+                    src_ip = packet_info['src_ip']
 
-                if src_ip not in ipv4_senders:
-                    ipv4_senders[src_ip] = 1
-                else:
-                    ipv4_senders[src_ip] += 1
+                    if src_ip not in ipv4_senders:
+                        ipv4_senders[src_ip] = 1
+                    else:
+                        ipv4_senders[src_ip] += 1
 
-                # Convert the dictionary to the desired list of dictionaries format
-                ipv4_senders_list = [{'node': ip, 'number_of_sent_packets': count} for ip, count in ipv4_senders.items()]
-                output_data['ipv4_senders'] = ipv4_senders_list
+                    # Convert the dictionary to the desired list of dictionaries format
+                    ipv4_senders_list = [{'node': ip, 'number_of_sent_packets': count} for ip, count in ipv4_senders.items()]
+                    output_data['ipv4_senders'] = ipv4_senders_list
 
-                # Determine the maximum number of sent packets by individual senders
-                max_send_packets = max(ipv4_senders.values())
-                max_send_packets_by = [ip for ip, count in ipv4_senders.items() if count == max_send_packets]
-                output_data['max_send_packets_by'] = max_send_packets_by
+                    # Determine the maximum number of sent packets by individual senders
+                    max_send_packets = max(ipv4_senders.values())
+                    max_send_packets_by = [ip for ip, count in ipv4_senders.items() if count == max_send_packets]
+                    output_data['max_send_packets_by'] = max_send_packets_by
 
         with open('output.yaml', 'w') as yaml_file:
             yaml_full = yaml.dump(output_data, default_flow_style=False, width=9999999)
@@ -247,6 +281,8 @@ def main():
             yaml_full = yaml_full.replace('PIPE', '|')
 
             yaml_file.write(yaml_full)
+
+            print("Output file created successfully")
 
     except Exception as e:
         print("Error opening or reading pcap file:", str(e))
