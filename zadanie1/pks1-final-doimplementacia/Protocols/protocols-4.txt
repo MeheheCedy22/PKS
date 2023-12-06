@@ -1,0 +1,10 @@
+http
+https
+telnet
+ssh
+ftp-control
+ftp-data
+tftp
+icmp
+arp
+cdp
