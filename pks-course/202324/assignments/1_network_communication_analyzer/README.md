@@ -1,5 +1,5 @@
 
-# **Zadanie 1: Analyzátor sieťovej komunikácie** ([EN](https://github.com/fiit-ba/pks-course/tree/main/202324/assignments/1_network_communication_analyzer/en.md))
+# **Zadanie 1: Analyzátor sieťovej komunikácie** ([EN](en.md))
 
 ## **Zadanie úlohy**
 
