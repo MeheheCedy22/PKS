@@ -2,7 +2,7 @@
 
 # Introduction to PKS
 
-### [Lectures / Prednášky](/202324/lectures)
-### [Exercises / Cvičenia](/202324/exercises)
-### [Assignments / Zadania](/202324/assignments)
-### [Course conditions / Podmienky na absolvovanie predmetu](/202324/others)
+### [Lectures / Prednášky](/pks-course/202324/lectures)
+### [Exercises / Cvičenia](/pks-course/202324/exercises)
+### [Assignments / Zadania](/pks-course/202324/assignments)
+### [Course conditions / Podmienky na absolvovanie predmetu](/pks-course/202324/others)
